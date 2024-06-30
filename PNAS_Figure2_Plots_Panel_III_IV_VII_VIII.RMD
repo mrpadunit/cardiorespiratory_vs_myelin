@@ -1,0 +1,207 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+Load packages
+```{r libraries}
+library(tidyverse)
+library(readxl)
+library(ggpmisc)
+library(Matrix)
+library(lmerTest)
+require(cowplot)
+library(gridExtra)
+library(ggbeeswarm)
+library(reshape2)
+library(performance)
+library(ggeffects)
+require("gridExtra")
+library(latex2exp)
+library(stringr)
+library(ggtext)
+library(writexl)
+```
+
+Set data folder
+```{r set data path}
+datapath <- '/data/gongz3/All non-MRI data/Projects/VO2_project/Revision/Second revision/Data Disclosure/'
+```
+
+Read in MRI data
+```{r read MRI data}
+MRI <- read_excel(file.path(datapath, 
+                            "BLSA_GESTALT_MWF_VO2.xlsx"), 
+                  sheet = "Sheet1") %>%
+  select(Age,Sex,SBP,VO2_max,starts_with("MWF"))
+
+Z_score_stats <- MRI %>%
+  summarise(mean_WB_MWF = mean(MWF_WholeBrain_WM, na.rm = T),
+            sd_WB_MWF = sd(MWF_WholeBrain_WM, na.rm = T), 
+            mean_Age = mean(Age, na.rm = T),
+            sd_Age = sd(Age, na.rm = T), 
+            mean_VO2= mean(VO2_max, na.rm = T),
+            sd_VO2 = sd(VO2_max, na.rm = T))
+
+MRI <- MRI %>%
+  mutate( WholeBrain_WM_MWF_original = MWF_WholeBrain_WM,
+          Age_original = Age,
+          VO2_max_orginal = VO2_max,
+          Age = (Age - mean(Age, na.rm = TRUE)) / sd(Age, na.rm = TRUE),
+          
+          SBP = (SBP - mean(SBP, na.rm = TRUE)) / sd(SBP, na.rm = TRUE),
+          VO2_max = (VO2_max - mean(VO2_max, na.rm = TRUE)) / sd(VO2_max, na.rm = TRUE),
+          Sex = as.factor(Sex),
+          across(starts_with("MWF"), ~ if_else(is.na(.),
+                                              NA_real_, # Keep NA as is
+                                              (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE))))
+
+```
+
+Plot Figure 2, panel III
+```{r}
+qrtl_VO2 <- quantile(MRI$VO2_max, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+qrtl_age <- quantile(MRI$Age, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+
+fit1 <- lm('MWF_WholeBrain_WM ~ Age + Sex + SBP + VO2_max + Age:VO2_max', MRI)
+
+terms_to_predict <- c(paste0("VO2_max[",
+                             paste(seq(from = -2, to = 2, length.out = 100), collapse = ", "), "]"),
+                      paste0("Age[",
+                             paste(qrtl_age[c("30%","50%","70%")], collapse = ", "), "]"))
+
+
+predict_result <- ggpredict(fit1, terms_to_predict) 
+predict_result$x_original = predict_result$x*Z_score_stats$sd_VO2 + Z_score_stats$mean_VO2
+predict_result$predicted_original = predict_result$predicted*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.low_original = predict_result$conf.low*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.high_original = predict_result$conf.high*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+
+pr1 <- ggplot(predict_result, aes(x = x_original, y = predicted_original, color = as.factor(group), group = group)) +
+  geom_line(size = 0.5) +  # Draw main lines thicker
+  geom_ribbon(aes(ymin = conf.low_original, ymax = conf.high_original, fill = as.factor(group)), alpha=0.2, color = NA, show.legend = FALSE) +  # Remove fill from confidence intervals
+  geom_line(aes(y = conf.low_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Lower CI boundary as dashed line
+  geom_line(aes(y = conf.high_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Upper CI boundary as dashed line
+  labs(x = expression(VO[2] ~ "max"),
+       y = "Whole Brain WM MWF",
+       title = expression("Predicted MWF by " * VO[2] ~ "max" ~ "at Different Age Levels")) +
+  scale_color_manual(values = c("red", "green", "blue"), name = "Age Quantiles", 
+                     labels = c("30%", 
+                                "50%", 
+                                "70%")) 
+
+print(pr1)
+```
+
+Plot Figure 2, panel IV
+```{r}
+qrtl_VO2 <- quantile(MRI$VO2_max, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+qrtl_age <- quantile(MRI$Age, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+
+fit1 <- lm('MWF_WholeBrain_WM ~ Age + Sex + SBP + VO2_max + Age:VO2_max', MRI)
+
+terms_to_predict <- c(paste0("Age[",
+                             paste(seq(from = -1.5, to = 2, length.out = 100), collapse = ", "), "]"),
+                      paste0("VO2_max[",
+                             paste(qrtl_VO2[c("30%","50%","70%")], collapse = ", "), "]"))
+
+
+predict_result <- ggpredict(fit1, terms_to_predict) 
+predict_result$x_original = predict_result$x*Z_score_stats$sd_Age + Z_score_stats$mean_Age
+predict_result$predicted_original = predict_result$predicted*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.low_original = predict_result$conf.low*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.high_original = predict_result$conf.high*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+
+pr2 <- ggplot(predict_result, aes(x = x_original, y = predicted_original, color = as.factor(group), group = group)) +
+  geom_line(size = 0.5) +  # Draw main lines thicker
+  geom_ribbon(aes(ymin = conf.low_original, ymax = conf.high_original, fill = as.factor(group)), alpha=0.2, color = NA, show.legend = FALSE) +  # Remove fill from confidence intervals
+  geom_line(aes(y = conf.low_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Lower CI boundary as dashed line
+  geom_line(aes(y = conf.high_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Upper CI boundary as dashed line
+  labs(x = "Age",
+       y = "Whole Brain WM MWF",
+       title = expression("Predicted MWF by Age at Different " * VO[2] ~ "max" ~ " Levels")) +
+
+  scale_color_manual(values = c("red", "green", "blue"), name = expression(VO[2] ~ "max" ~ "Quantiles"),  
+                     labels = c(expression("30%" ),
+                                expression("50%" ),
+                                expression("70%" ))
+                     ) 
+
+print(pr2)
+```
+
+Plot Figure 2, panel VII
+```{r}
+qrtl_VO2 <- quantile(MRI$VO2_max, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+qrtl_age <- quantile(MRI$Age, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+
+fit1 <- lm('MWF_WholeBrain_WM ~ Age*VO2_max + I(Age^2)*VO2_max + Sex + SBP', MRI)
+
+terms_to_predict <- c(paste0("VO2_max[",
+                             paste(seq(from = -2, to = 2, length.out = 100), collapse = ", "), "]"),
+                      paste0("Age[",
+                             paste(qrtl_age[c("30%","50%","70%")], collapse = ", "), "]"))
+
+
+predict_result <- ggpredict(fit1, terms_to_predict) 
+predict_result$x_original = predict_result$x*Z_score_stats$sd_VO2 + Z_score_stats$mean_VO2
+predict_result$predicted_original = predict_result$predicted*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.low_original = predict_result$conf.low*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.high_original = predict_result$conf.high*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+
+pr3 <- ggplot(predict_result, aes(x = x_original, y = predicted_original, color = as.factor(group), group = group)) +
+  geom_line(size = 0.5) +  # Draw main lines thicker
+  geom_ribbon(aes(ymin = conf.low_original, ymax = conf.high_original, fill = as.factor(group)), alpha=0.2, color = NA, show.legend = FALSE) +  # Remove fill from confidence intervals
+  geom_line(aes(y = conf.low_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Lower CI boundary as dashed line
+  geom_line(aes(y = conf.high_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Upper CI boundary as dashed line
+  labs(x = expression(VO[2] ~ "max"),
+       y = "Whole Brain WM MWF",
+       title = expression("Predicted MWF by " * VO[2] ~ "max" ~ "at Different Age Levels")) +
+  scale_color_manual(values = c("red", "green", "blue"), name = "Age Quantiles", 
+                     labels = c("30%", 
+                                "50%", 
+                                "70%")) + scale_y_continuous(limits = c(0.140, 0.25), breaks = seq(0.140, 0.25, 0.035)) 
+
+print(pr3)
+```
+
+Plot Figure 2, panel VIII
+```{r}
+qrtl_VO2 <- quantile(MRI$VO2_max, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+qrtl_age <- quantile(MRI$Age, probs = seq(0, 1, by = 0.05), na.rm = TRUE)
+
+fit1 <- lm('MWF_WholeBrain_WM ~ Age*VO2_max + I(Age^2)*VO2_max + Sex + SBP', MRI)
+
+terms_to_predict <- c(paste0("Age[",
+                             paste(seq(from = -1.5, to = 2, length.out = 100), collapse = ", "), "]"),
+                      paste0("VO2_max[",
+                             paste(qrtl_VO2[c("30%","50%","70%")], collapse = ", "), "]"))
+
+
+predict_result <- ggpredict(fit1, terms_to_predict) 
+predict_result$x_original = predict_result$x*Z_score_stats$sd_Age + Z_score_stats$mean_Age
+predict_result$predicted_original = predict_result$predicted*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.low_original = predict_result$conf.low*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+predict_result$conf.high_original = predict_result$conf.high*Z_score_stats$sd_WB_MWF + Z_score_stats$mean_WB_MWF
+
+pr4 <- ggplot(predict_result, aes(x = x_original, y = predicted_original, color = as.factor(group), group = group)) +
+  geom_line(size = 0.5) +  # Draw main lines thicker
+  geom_ribbon(aes(ymin = conf.low_original, ymax = conf.high_original, fill = as.factor(group)), alpha=0.2,
+              color = NA, show.legend = FALSE) +  # Remove fill from confidence intervals
+  geom_line(aes(y = conf.low_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Lower CI boundary as dashed line
+  geom_line(aes(y = conf.high_original, color = as.factor(group)), size = 0.1, linetype = "dashed") +  # Upper CI boundary as dashed line
+  labs(x = "Age",
+       y = "Whole Brain WM MWF",
+       title = expression("Predicted MWF by Age at Different " * VO[2] ~ "max" ~ " Levels")) +
+
+  scale_color_manual(values = c("red", "green", "blue"), name = expression(VO[2] ~ "max" ~ "Quantiles"),  
+                     labels = c(expression("30%" ),
+                                expression("50%" ),
+                                expression("70%" ))
+                     )
+
+print(pr4)
+```
