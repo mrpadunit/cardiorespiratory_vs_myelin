@@ -12,3 +12,9 @@ The following code reproduces Figure 2:
 - `PNAS_Figure2_MWF_Plots_Panel_I_and_V.m`
 - `PNAS_Figure2_MWF_Plots_Panel_II_and_VI.m`
 - `PNAS_Figure2_Plots_Panel_III_IV_VII_VIII.RMD`
+
+## Results
+
+The following files contain the regression results for model I and model II:
+- `Results_VO2_MWF_Model1.xlsx`
+- `Results_VO2_MWF_Model2.xlsx`
