@@ -18,3 +18,7 @@ The following code reproduces Figure 2:
 The following files contain the regression results for model I and model II:
 - `Results_VO2_MWF_Model1.xlsx`
 - `Results_VO2_MWF_Model2.xlsx`
+
+## Contact
+
+Please contact Dr. Mustapha Bouhrara (mustapha.bouhrara2@nih.gov) for any inquiry. 
